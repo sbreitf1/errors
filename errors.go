@@ -48,7 +48,7 @@ type Error interface {
 	Untracked() Error
 	// Msg returns a new Error object and replaces the error message. You can supply all formatting args later using Args() to skip formatting in this call.
 	Msg(msg string, args ...interface{}) Error
-	// Args returns a new Error object with filled placeholders.
+	// Args returns a new Error object with filled placeholders. A safe message remains safe.
 	Args(args ...interface{}) Error
 	// Cause adds the given error as cause. It's error message will be appended to the output.
 	Cause(err error) Error
