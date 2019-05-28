@@ -1,12 +1,10 @@
 package errors
 
 import (
-	"bytes"
 	"fmt"
 	"strings"
 	"testing"
 
-	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -192,13 +190,20 @@ func TestNilToRequest(t *testing.T) {
 	assert.Nil(t, r.lastError)
 }
 
+func TestDefaultLogger(t *testing.T) {
+	err := New("TestError").Msg("a safe error message").StrCause("an unsafe cause").HTTPCode(500).ErrCode(42).Safe()
+	err.ToLog()
+}
+
 func TestToLog(t *testing.T) {
 	err := New("TestError").Msg("a safe error message").StrCause("an unsafe cause").HTTPCode(500).ErrCode(42).Safe()
 	r := &requestAborter{}
-	buffer := new(bytes.Buffer)
-	log.SetOutput(buffer)
+	var sb strings.Builder
+	Logger = func(msg string, args ...interface{}) {
+		sb.WriteString(fmt.Sprintf(msg, args))
+	}
 	err.ToRequestAndLog(r)
-	str := buffer.String()
+	str := sb.String()
 
 	assert.True(t, strings.Contains(str, err.GetID()), "Log should contain error id")
 	assert.True(t, strings.Contains(str, err.Error()), "Log should contain unsafe error message")
@@ -208,10 +213,12 @@ func TestToLog(t *testing.T) {
 func TestToLogExcept(t *testing.T) {
 	err := New("TestError").Msg("a safe error message").StrCause("an unsafe cause").HTTPCode(500).ErrCode(42).Safe()
 	r := &requestAborter{}
-	buffer := new(bytes.Buffer)
-	log.SetOutput(buffer)
+	var sb strings.Builder
+	Logger = func(msg string, args ...interface{}) {
+		sb.WriteString(fmt.Sprintf(msg, args))
+	}
 	err.ToRequestAndLog(r, New("TestError"))
-	str := buffer.String()
+	str := sb.String()
 
 	assert.False(t, strings.Contains(str, err.GetID()), "Log should not contain error id")
 	assert.False(t, strings.Contains(str, err.Error()), "Log should not contain unsafe error message")

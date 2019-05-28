@@ -6,8 +6,6 @@ import (
 	"runtime/debug"
 	"strings"
 	"time"
-
-	log "github.com/sirupsen/logrus"
 )
 
 const (
@@ -19,11 +17,18 @@ var (
 	// PrintUnsafeErrors controls wether unsafe (technical) error messages should be visible to the user in response messages.
 	PrintUnsafeErrors = false
 
+	// Logger is called to print an error to log.
+	Logger = defaultStdOutLogger
+
 	// GenericError represents a generic error without further information.
 	GenericError = New("GenericError").Msg("A generic error occured").Template()
 	// ConfigurationError an error that is caused by an invalid configuration.
 	ConfigurationError = New("ConfigurationError").Msg("The specified configuration is not valid").Template()
 )
+
+func defaultStdOutLogger(msg string, args ...interface{}) {
+	fmt.Printf(msg+"\n", args...)
+}
 
 // ErrorType represents the base type of an error regardless of the specific error message.
 type ErrorType string
@@ -141,10 +146,10 @@ func (err baseError) ToLog(except ...Error) {
 			}
 		}
 		if len(err.id) > 0 {
-			log.Errorf("[ERR %v] %v", err.id, err.Error())
+			Logger("[ERR %v] %v", err.id, err.Error())
 		}
 		if len(err.stackTrace) > 0 {
-			log.Errorf("[STACK %v] %v", err.id, err.stackTrace)
+			Logger("[STACK %v] %v", err.id, err.stackTrace)
 		}
 	}
 }
