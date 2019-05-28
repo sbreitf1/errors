@@ -24,6 +24,7 @@ var (
 	GenericError = New("GenericError").Msg("A generic error occured").Template()
 	// ConfigurationError an error that is caused by an invalid configuration.
 	ConfigurationError = New("ConfigurationError").Msg("The specified configuration is not valid").Template()
+	//TODO differentiate between error template and error itself for better usability
 )
 
 func defaultStdOutLogger(msg string, args ...interface{}) {
@@ -51,6 +52,10 @@ type Error interface {
 	Template() Error
 	// Untracked disables id and stack trace printing for this error.
 	Untracked() Error
+	// WithStackTrace enables stack trace printing. Has no effect on untracked errors.
+	WithStackTrace() Error
+	// WithoutStackTrace disables stack trace printing.
+	WithoutStackTrace() Error
 	// Msg returns a new Error object and replaces the error message. You can supply all formatting args later using Args() to skip formatting in this call.
 	Msg(msg string, args ...interface{}) Error
 	// Args returns a new Error object with filled placeholders. A safe message remains safe.
@@ -87,16 +92,17 @@ type Error interface {
 }
 
 type baseError struct {
-	untracked  bool
-	id         string
-	stackTrace string
-	errType    ErrorType
-	message    string
-	cause      Error
-	httpCode   int
-	errCode    int
-	noLog      bool
-	isSafe     bool
+	untracked      bool
+	withStackTrace bool
+	id             string
+	stackTrace     string
+	errType        ErrorType
+	message        string
+	cause          Error
+	httpCode       int
+	errCode        int
+	noLog          bool
+	isSafe         bool
 }
 
 func (err baseError) getID() string {
@@ -148,7 +154,7 @@ func (err baseError) ToLog(except ...Error) {
 		if len(err.id) > 0 {
 			Logger("[ERR %v] %v", err.id, err.Error())
 		}
-		if len(err.stackTrace) > 0 {
+		if err.withStackTrace && len(err.stackTrace) > 0 {
 			Logger("[STACK %v] %v", err.id, err.stackTrace)
 		}
 	}
@@ -195,31 +201,37 @@ func (err baseError) string(safe bool) string {
 }
 
 func (err baseError) Template() Error {
-	return baseError{err.untracked, "", "", err.errType, err.message, err.cause, err.httpCode, err.errCode, err.noLog, false}
+	return baseError{err.untracked, err.withStackTrace, "", "", err.errType, err.message, err.cause, err.httpCode, err.errCode, err.noLog, false}
 }
 func (err baseError) Untracked() Error {
-	return baseError{true, "", "", err.errType, err.message, err.cause, err.httpCode, err.errCode, err.noLog, false}
+	return baseError{true, err.withStackTrace, "", "", err.errType, err.message, err.cause, err.httpCode, err.errCode, err.noLog, false}
+}
+func (err baseError) WithStackTrace() Error {
+	return baseError{err.untracked, true, err.getID(), err.getStackTrace(1), err.errType, err.message, err.cause, err.httpCode, err.errCode, err.noLog, err.isSafe}
+}
+func (err baseError) WithoutStackTrace() Error {
+	return baseError{err.untracked, false, err.getID(), err.getStackTrace(1), err.errType, err.message, err.cause, err.httpCode, err.errCode, err.noLog, err.isSafe}
 }
 func (err baseError) Msg(msg string, args ...interface{}) Error {
 	if len(args) == 0 {
-		return baseError{err.untracked, err.getID(), err.getStackTrace(1), err.errType, msg, err.cause, err.httpCode, err.errCode, err.noLog, false}
+		return baseError{err.untracked, err.withStackTrace, err.getID(), err.getStackTrace(1), err.errType, msg, err.cause, err.httpCode, err.errCode, err.noLog, false}
 	}
-	return baseError{err.untracked, err.getID(), err.getStackTrace(1), err.errType, fmt.Sprintf(msg, args...), err.cause, err.httpCode, err.errCode, err.noLog, false}
+	return baseError{err.untracked, err.withStackTrace, err.getID(), err.getStackTrace(1), err.errType, fmt.Sprintf(msg, args...), err.cause, err.httpCode, err.errCode, err.noLog, false}
 }
 func (err baseError) Args(args ...interface{}) Error {
-	return baseError{err.untracked, err.getID(), err.getStackTrace(1), err.errType, fmt.Sprintf(err.message, args...), err.cause, err.httpCode, err.errCode, err.noLog, err.isSafe}
+	return baseError{err.untracked, err.withStackTrace, err.getID(), err.getStackTrace(1), err.errType, fmt.Sprintf(err.message, args...), err.cause, err.httpCode, err.errCode, err.noLog, err.isSafe}
 }
 func (err baseError) Cause(cause error) Error {
-	return baseError{err.untracked, err.getID(), err.getStackTrace(1), err.errType, err.message, Wrap(cause), err.httpCode, err.errCode, err.noLog, err.isSafe}
+	return baseError{err.untracked, err.withStackTrace, err.getID(), err.getStackTrace(1), err.errType, err.message, Wrap(cause), err.httpCode, err.errCode, err.noLog, err.isSafe}
 }
 func (err baseError) StrCause(str string, args ...interface{}) Error {
-	return baseError{err.untracked, err.getID(), err.getStackTrace(1), err.errType, err.message, GenericError.Msg(str, args...), err.httpCode, err.errCode, err.noLog, err.isSafe}
+	return baseError{err.untracked, err.withStackTrace, err.getID(), err.getStackTrace(1), err.errType, err.message, GenericError.Msg(str, args...), err.httpCode, err.errCode, err.noLog, err.isSafe}
 }
 func (err baseError) Expand(msg string, args ...interface{}) Error {
-	return baseError{err.untracked, err.getID(), err.getStackTrace(1), err.errType, fmt.Sprintf(msg, args...), err, err.httpCode, err.errCode, err.noLog, false}
+	return baseError{err.untracked, err.withStackTrace, err.getID(), err.getStackTrace(1), err.errType, fmt.Sprintf(msg, args...), err, err.httpCode, err.errCode, err.noLog, false}
 }
 func (err baseError) ExpandSafe(msg string, args ...interface{}) Error {
-	return baseError{err.untracked, err.getID(), err.getStackTrace(1), err.errType, fmt.Sprintf(msg, args...), err, err.httpCode, err.errCode, err.noLog, true}
+	return baseError{err.untracked, err.withStackTrace, err.getID(), err.getStackTrace(1), err.errType, fmt.Sprintf(msg, args...), err, err.httpCode, err.errCode, err.noLog, true}
 }
 
 func (err baseError) GetType() ErrorType {
@@ -279,14 +291,14 @@ func wrap(baseErr error, withType bool, depth int) Error {
 			}
 		}
 
-		err := baseError{false, "", "", errType, msg, nil, defaultHTTPCode, defaultErrCode, false, false}
-		return baseError{err.untracked, err.getID(), err.getStackTrace(depth + 1), errType, msg, nil, defaultHTTPCode, defaultErrCode, false, false}
+		err := baseError{false, true, "", "", errType, msg, nil, defaultHTTPCode, defaultErrCode, false, false}
+		return baseError{err.untracked, err.withStackTrace, err.getID(), err.getStackTrace(depth + 1), errType, msg, nil, defaultHTTPCode, defaultErrCode, false, false}
 	}
 }
 
 // New creates a new Error with custom error type.
 func New(errType ErrorType) Error {
-	return baseError{false, "", "", errType, "", nil, defaultHTTPCode, defaultErrCode, false, false}
+	return baseError{false, true, "", "", errType, "", nil, defaultHTTPCode, defaultErrCode, false, false}
 }
 
 func getErrorType(err error) ErrorType {
@@ -321,15 +333,15 @@ func DefaultAPI(message string) APIError {
 }
 
 func (err baseError) HTTPCode(code int) Error {
-	return baseError{err.untracked, err.getID(), err.getStackTrace(1), err.errType, err.message, err.cause, code, err.errCode, err.noLog, err.isSafe}
+	return baseError{err.untracked, err.withStackTrace, err.getID(), err.getStackTrace(1), err.errType, err.message, err.cause, code, err.errCode, err.noLog, err.isSafe}
 }
 
 func (err baseError) ErrCode(code int) Error {
-	return baseError{err.untracked, err.getID(), err.getStackTrace(1), err.errType, err.message, err.cause, err.httpCode, code, err.noLog, err.isSafe}
+	return baseError{err.untracked, err.withStackTrace, err.getID(), err.getStackTrace(1), err.errType, err.message, err.cause, err.httpCode, code, err.noLog, err.isSafe}
 }
 
 func (err baseError) Safe() Error {
-	return baseError{err.untracked, err.getID(), err.getStackTrace(1), err.errType, err.message, err.cause, err.httpCode, err.errCode, err.noLog, true}
+	return baseError{err.untracked, err.withStackTrace, err.getID(), err.getStackTrace(1), err.errType, err.message, err.cause, err.httpCode, err.errCode, err.noLog, true}
 }
 
 func (err baseError) API() APIError {

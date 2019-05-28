@@ -158,10 +158,20 @@ func TestID(t *testing.T) {
 func TestStackTrace(t *testing.T) {
 	err := GenericError
 	assert.Equal(t, "", err.GetStackTrace())
-	err = err.Msg("new %v message")
+	err = err.WithoutStackTrace().Msg("new %v message").WithStackTrace()
 	trace := err.GetStackTrace()
 	assert.True(t, strings.Contains(err.GetStackTrace(), "TestStackTrace"), "Stack trace should contain 'TestStackTrace'")
 	assert.False(t, strings.Contains(err.GetStackTrace(), "Msg"), "Stack trace should not contain 'Msg'")
+	err = err.Args("test")
+	assert.Equal(t, trace, err.GetStackTrace(), "Stack trace should not change once it is prepared")
+}
+
+func TestWithoutStackTrace(t *testing.T) {
+	err := GenericError
+	assert.Equal(t, "", err.GetStackTrace())
+	err = err.WithoutStackTrace().Msg("new %v message")
+	trace := err.GetStackTrace()
+	assert.False(t, strings.Contains(err.GetStackTrace(), "TestStackTrace"), "Stack trace should not contain 'TestStackTrace'")
 	err = err.Args("test")
 	assert.Equal(t, trace, err.GetStackTrace(), "Stack trace should not change once it is prepared")
 }
