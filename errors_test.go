@@ -9,37 +9,42 @@ import (
 )
 
 func TestGetType(t *testing.T) {
-	err := New("test")
+	err := New("test").Make()
 	assert.Equal(t, ErrorType("test"), getErrorType(err))
 }
 
 func TestMessage(t *testing.T) {
-	err := New("test").Msg("Test message")
+	err := New("test").Msg("Test message").Make()
 	assert.Equal(t, "Test message", err.Error())
 }
 
 func TestMessageArgs(t *testing.T) {
-	err := New("test").Msg("Test %v message", "foobar")
+	err := New("test").Msg("Test %v message", "foobar").Make()
+	assert.Equal(t, "Test foobar message", err.Error())
+}
+
+func TestErrorMessageArgs(t *testing.T) {
+	err := New("test").Make().Msg("Test %v message", "foobar")
 	assert.Equal(t, "Test foobar message", err.Error())
 }
 
 func TestEmptyMessage(t *testing.T) {
-	err := New("test")
+	err := New("test").Make()
 	assert.Equal(t, "test", err.Error())
 }
 
 func TestFormatMessage(t *testing.T) {
-	err := New("test").Msg("Test %v message").Args("foobar")
+	err := New("test").Msg("Test %v message").Make().Args("foobar")
 	assert.Equal(t, "Test foobar message", err.Error())
 }
 
 func TestCause(t *testing.T) {
-	err := New("test").Msg("Error").Cause(New("suberr").Msg("Inner message"))
+	err := New("test").Msg("Error").Make().Cause(New("suberr").Msg("Inner message").Make())
 	assert.Equal(t, "Error: Inner message", err.Error())
 }
 
 func TestStrCause(t *testing.T) {
-	err := New("test").Msg("Error").StrCause("inner message").Safe()
+	err := New("test").Msg("Error").Make().StrCause("inner message").Safe()
 	assert.Equal(t, "Error: inner message", err.Error())
 	assert.Equal(t, "Error", err.SafeString())
 }
@@ -67,7 +72,7 @@ func TestExpandSafeWithUnsafeCause(t *testing.T) {
 }
 
 func TestUnsafe(t *testing.T) {
-	err := New("test").Msg("totally unsafe secret ane46ndsn4e")
+	err := New("test").Msg("totally unsafe secret ane46ndsn4e").Make()
 	api := err.API()
 	assert.False(t, strings.Contains(api.Message, "ane46ndsn4e"))
 	assert.True(t, strings.Contains(api.Message, err.GetID()))
@@ -76,28 +81,23 @@ func TestUnsafe(t *testing.T) {
 func TestUnsafeDisabled(t *testing.T) {
 	PrintUnsafeErrors = true
 	defer func() { PrintUnsafeErrors = false }()
-	err := New("test").Msg("totally unsafe secret ane46ndsn4e")
+	err := New("test").Msg("totally unsafe secret ane46ndsn4e").Make()
 	assert.True(t, strings.Contains(err.API().Message, "ane46ndsn4e"))
 }
 
 func TestSafe(t *testing.T) {
-	err := New("test").Msg("safe gibberish: ane46ndsn4e").Safe()
+	err := New("test").Msg("safe gibberish: ane46ndsn4e").Safe().Make()
 	assert.True(t, strings.Contains(err.API().Message, "ane46ndsn4e"))
 }
 
-func TestTemplate(t *testing.T) {
-	err := New("test").Msg("safe gibberish: ane46ndsn4e")
-	oldID := err.GetID()
-	err2 := err.Template().Msg("another try")
-	assert.NotEqual(t, oldID, err2.GetID())
-}
-
 func TestEquals(t *testing.T) {
-	err := GenericError.Msg("test %v").Args("foobar").Cause(nil).Cause(fmt.Errorf("inner")).HTTPCode(400).ErrCode(42)
-	assert.True(t, err.Equals(GenericError))
+	err := GenericError.Make().Msg("test %v").Args("foobar").Cause(nil).Cause(fmt.Errorf("inner")).HTTPCode(400).ErrCode(42)
+	assert.True(t, err.Is(GenericError))
 	assert.False(t, err.Equals(nil))
-	assert.True(t, AreEqual(err, GenericError))
-	assert.True(t, AreEqual(GenericError, err))
+	assert.True(t, InstanceOf(err, GenericError))
+	assert.False(t, InstanceOf(nil, GenericError))
+	assert.True(t, GenericError.Make().Equals(err))
+	assert.True(t, AreEqual(err, GenericError.Make()))
 	assert.False(t, AreEqual(err, nil))
 	assert.False(t, AreEqual(nil, err))
 	assert.True(t, AreEqual(nil, nil))
@@ -140,14 +140,13 @@ func TestDefaultAPI(t *testing.T) {
 }
 
 func TestToAPI(t *testing.T) {
-	err := GenericError.Msg("test api").HTTPCode(400).ErrCode(42).Untracked().Safe()
+	err := GenericError.Msg("test api").HTTPCode(400).ErrCode(42).Untracked().Safe().Make()
 	expectedErr := APIError{400, 42, "test api"}
 	assert.Equal(t, expectedErr, err.API())
 }
 
 func TestID(t *testing.T) {
-	err := GenericError
-	assert.Equal(t, "", err.GetID())
+	err := GenericError.Make()
 	err = err.Msg("new %v message")
 	id := err.GetID()
 	assert.NotEqual(t, "", id)
@@ -155,10 +154,18 @@ func TestID(t *testing.T) {
 	assert.Equal(t, id, err.GetID())
 }
 
+func TestIDPersistence(t *testing.T) {
+	err := GenericError.Make()
+	err = err.Msg("new %v message")
+	err2 := err.Args("foo").Safe().Expand("outer exception").ErrCode(4).HTTPCode(403).Untracked().WithoutStackTrace()
+	assert.NotEqual(t, "", err2.GetID())
+	err = err.Args("test")
+	assert.Equal(t, err.GetID(), err2.GetID())
+}
+
 func TestStackTrace(t *testing.T) {
-	err := GenericError
-	assert.Equal(t, "", err.GetStackTrace())
-	err = err.WithoutStackTrace().Msg("new %v message").WithStackTrace()
+	err := GenericError.WithoutStackTrace().WithStackTrace().Make()
+	err = err.Msg("new %v message")
 	trace := err.GetStackTrace()
 	assert.True(t, strings.Contains(err.GetStackTrace(), "TestStackTrace"), "Stack trace should contain 'TestStackTrace'")
 	assert.False(t, strings.Contains(err.GetStackTrace(), "Msg"), "Stack trace should not contain 'Msg'")
@@ -166,18 +173,8 @@ func TestStackTrace(t *testing.T) {
 	assert.Equal(t, trace, err.GetStackTrace(), "Stack trace should not change once it is prepared")
 }
 
-func TestWithoutStackTrace(t *testing.T) {
-	err := GenericError
-	assert.Equal(t, "", err.GetStackTrace())
-	err = err.WithoutStackTrace().Msg("new %v message")
-	trace := err.GetStackTrace()
-	assert.False(t, strings.Contains(err.GetStackTrace(), "TestStackTrace"), "Stack trace should not contain 'TestStackTrace'")
-	err = err.Args("test")
-	assert.Equal(t, trace, err.GetStackTrace(), "Stack trace should not change once it is prepared")
-}
-
 func TestErrorToRequest(t *testing.T) {
-	err := New("TestError").Msg("This is a safe error message").HTTPCode(400).ErrCode(123).Untracked().Safe()
+	err := New("TestError").Msg("This is a safe error message").HTTPCode(400).ErrCode(123).Untracked().Safe().Make()
 	r := &requestAborter{}
 	err.ToRequest(r)
 	expected := API(400, 123, "This is a safe error message")
@@ -186,7 +183,7 @@ func TestErrorToRequest(t *testing.T) {
 }
 
 func TestToRequest(t *testing.T) {
-	err := New("TestError").Msg("This is a safe error message").HTTPCode(400).ErrCode(123).Untracked().Safe()
+	err := New("TestError").Msg("This is a safe error message").HTTPCode(400).ErrCode(123).Untracked().Safe().Make()
 	r := &requestAborter{}
 	ToRequest(r, err)
 	expected := API(400, 123, "This is a safe error message")
@@ -201,12 +198,12 @@ func TestNilToRequest(t *testing.T) {
 }
 
 func TestDefaultLogger(t *testing.T) {
-	err := New("TestError").Msg("a safe error message").StrCause("an unsafe cause").HTTPCode(500).ErrCode(42).Safe()
+	err := New("TestError").Msg("a safe error message").Make().StrCause("an unsafe cause").HTTPCode(500).ErrCode(42).Safe()
 	err.ToLog()
 }
 
 func TestToLog(t *testing.T) {
-	err := New("TestError").Msg("a safe error message").StrCause("an unsafe cause").HTTPCode(500).ErrCode(42).Safe()
+	err := New("TestError").Msg("a safe error message").WithStackTrace().Make().StrCause("an unsafe cause").HTTPCode(500).ErrCode(42).Safe()
 	r := &requestAborter{}
 	var sb strings.Builder
 	Logger = func(msg string, args ...interface{}) {
@@ -221,13 +218,13 @@ func TestToLog(t *testing.T) {
 }
 
 func TestToLogExcept(t *testing.T) {
-	err := New("TestError").Msg("a safe error message").StrCause("an unsafe cause").HTTPCode(500).ErrCode(42).Safe()
+	err := New("TestError").Msg("a safe error message").Make().StrCause("an unsafe cause").HTTPCode(500).ErrCode(42).Safe()
 	r := &requestAborter{}
 	var sb strings.Builder
 	Logger = func(msg string, args ...interface{}) {
 		sb.WriteString(fmt.Sprintf(msg, args))
 	}
-	err.ToRequestAndLog(r, New("TestError"))
+	err.ToRequestAndLog(r, New("TestError").Make())
 	str := sb.String()
 
 	assert.False(t, strings.Contains(str, err.GetID()), "Log should not contain error id")

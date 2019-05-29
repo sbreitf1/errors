@@ -1,0 +1,37 @@
+package errors
+
+// ErrorType represents the base type of an error regardless of the specific error message.
+type ErrorType string
+
+// RequestAborter defines the required functionality to abort an HTTP request and is compatible with *gin.Context.
+type RequestAborter interface {
+	AbortWithStatusJSON(int, interface{})
+}
+
+// TypedError represents errors and templates that define an error type.
+type TypedError interface {
+	// GetType returns the type of the error that is used for comparison.
+	GetType() ErrorType
+}
+
+type content struct {
+	message string
+	cause   Error
+}
+
+type flags struct {
+	untracked      bool
+	withStackTrace bool
+	noLog          bool
+	isSafe         bool
+}
+
+type trace struct {
+	id         string
+	stackTrace string
+}
+
+type apiData struct {
+	httpCode int
+	errCode  int
+}

@@ -1,59 +1,45 @@
 package errors
 
 import (
-	"crypto/sha1"
 	"fmt"
-	"runtime/debug"
-	"strings"
-	"time"
 )
 
 const (
-	defaultHTTPCode = 500
-	defaultErrCode  = 0
+	defaultHTTPCode       = 500
+	defaultErrCode        = 0
+	defaultWithStackTrace = false
 )
 
 var (
 	// PrintUnsafeErrors controls wether unsafe (technical) error messages should be visible to the user in response messages.
 	PrintUnsafeErrors = false
 
-	// Logger is called to print an error to log.
-	Logger = defaultStdOutLogger
-
-	// GenericError represents a generic error without further information.
-	GenericError = New("GenericError").Msg("A generic error occured").Template()
-	// ConfigurationError an error that is caused by an invalid configuration.
-	ConfigurationError = New("ConfigurationError").Msg("The specified configuration is not valid").Template()
-	//TODO differentiate between error template and error itself for better usability
+	// Logger is called to print errors and stack traces to log.
+	Logger = DefaultStdOutLogger
 )
 
-func defaultStdOutLogger(msg string, args ...interface{}) {
+// DefaultStdOutLogger prints all error messages to StdOut.
+func DefaultStdOutLogger(msg string, args ...interface{}) {
 	fmt.Printf(msg+"\n", args...)
 }
 
-// ErrorType represents the base type of an error regardless of the specific error message.
-type ErrorType string
-
-// RequestAborter defines the required functionality to abort an HTTP request and is compatible with *gin.Context.
-type RequestAborter interface {
-	AbortWithStatusJSON(int, interface{})
-}
+/* ############################################# */
+/* ###                 Error                 ### */
+/* ############################################# */
 
 // Error is used as base error type in the whole application. Use Wrap(error) to encapsulate errors from third-party code.
 type Error interface {
 	error
+	TypedError
 	fmt.Stringer
+
 	SafeString() string
 
 	GetID() string
 	GetStackTrace() string
 
-	// Template marks the error as template and the next interaction will create the id and stack trace.
-	Template() Error
 	// Untracked disables id and stack trace printing for this error.
 	Untracked() Error
-	// WithStackTrace enables stack trace printing. Has no effect on untracked errors.
-	WithStackTrace() Error
 	// WithoutStackTrace disables stack trace printing.
 	WithoutStackTrace() Error
 	// Msg returns a new Error object and replaces the error message. You can supply all formatting args later using Args() to skip formatting in this call.
@@ -69,10 +55,10 @@ type Error interface {
 	// ExpandSafe creates a copy of this error with given message and sets the current error as cause. The expanded message is marked as safe.
 	ExpandSafe(msg string, args ...interface{}) Error
 
-	// GetType returns the type of the error that is used for comparison.
-	GetType() ErrorType
 	// Equals returns true when the error types are equal (ignoring the explicit error message).
 	Equals(other error) bool
+	// Is returns trhe when the error is an instance of the given template.
+	Is(template Template) bool
 
 	// HTTPCode sets the http response code.
 	HTTPCode(code int) Error
@@ -85,158 +71,110 @@ type Error interface {
 	// ToRequest writes the APIError message representation to a HTTP request and aborts pipeline execution.
 	ToRequest(r RequestAborter)
 	// ToRequestAndLog calls ToRequest(r) and ToLog(...except).
-	ToRequestAndLog(r RequestAborter, except ...Error)
+	ToRequestAndLog(r RequestAborter, except ...TypedError)
 
 	// ToLog writes the error message with debug data to the log.
-	ToLog(except ...Error)
+	ToLog(except ...TypedError)
 }
 
 type baseError struct {
-	untracked      bool
-	withStackTrace bool
-	id             string
-	stackTrace     string
-	errType        ErrorType
-	message        string
-	cause          Error
-	httpCode       int
-	errCode        int
-	noLog          bool
-	isSafe         bool
-}
-
-func (err baseError) getID() string {
-	if len(err.id) > 0 {
-		return err.id
-	}
-	h := sha1.New()
-	h.Write([]byte(fmt.Sprintf("%v|%v|%v", err.errType, err.message, time.Now())))
-	hash := h.Sum(nil)
-	return fmt.Sprintf("%x", hash[:8])
-}
-
-func (err baseError) GetID() string {
-	return err.id
-}
-func (err baseError) GetStackTrace() string {
-	return err.stackTrace
-}
-
-func (err baseError) getStackTrace(depth int) string {
-	if len(err.stackTrace) > 0 {
-		return err.stackTrace
-	}
-	//TOD rework using -> pc, file, line, ok := runtime.Caller(i)
-	fullTrace := string(debug.Stack())
-	lines := strings.Split(fullTrace, "\n")
-	var sb strings.Builder
-	if len(lines) > 0 {
-		// first line contains information on the executing goroutine
-		sb.WriteString(lines[0])
-		// skip this frame (getStackTrace) and the internal ones denoted by depth
-		// every frame consists of two lines in the stack trace
-		for i := 1 + 2*(depth+2); i < len(lines); i++ {
-			sb.WriteString("\n")
-			sb.WriteString(lines[i])
-		}
-	}
-	return sb.String()
-}
-
-func (err baseError) ToLog(except ...Error) {
-	if !err.untracked {
-		for _, exceptErr := range except {
-			if AreEqual(err, exceptErr) {
-				// do not print error as it is explicitly excluded
-				return
-			}
-		}
-		if len(err.id) > 0 {
-			Logger("[ERR %v] %v", err.id, err.Error())
-		}
-		if err.withStackTrace && len(err.stackTrace) > 0 {
-			Logger("[STACK %v] %v", err.id, err.stackTrace)
-		}
-	}
-}
-
-func (err baseError) ToRequestAndLog(r RequestAborter, except ...Error) {
-	err.ToLog(except...)
-	err.ToRequest(r)
-}
-
-func (err baseError) Error() string {
-	return err.String()
-}
-func (err baseError) String() string {
-	return err.string(false)
-}
-func (err baseError) SafeString() string {
-	return err.string(true)
-}
-func (err baseError) string(safe bool) string {
-	if !safe || err.isSafe {
-		var prefix string
-		if err.message == "" {
-			prefix = string(err.errType)
-		} else {
-			prefix = err.message
-		}
-
-		suffix := ""
-		if err.cause != nil {
-			if safe {
-				suffix = err.cause.SafeString()
-			} else {
-				suffix = err.cause.String()
-			}
-			if len(suffix) > 0 {
-				suffix = ": " + suffix
-			}
-		}
-
-		return prefix + suffix
-	}
-	return ""
-}
-
-func (err baseError) Template() Error {
-	return baseError{err.untracked, err.withStackTrace, "", "", err.errType, err.message, err.cause, err.httpCode, err.errCode, err.noLog, false}
-}
-func (err baseError) Untracked() Error {
-	return baseError{true, err.withStackTrace, "", "", err.errType, err.message, err.cause, err.httpCode, err.errCode, err.noLog, false}
-}
-func (err baseError) WithStackTrace() Error {
-	return baseError{err.untracked, true, err.getID(), err.getStackTrace(1), err.errType, err.message, err.cause, err.httpCode, err.errCode, err.noLog, err.isSafe}
-}
-func (err baseError) WithoutStackTrace() Error {
-	return baseError{err.untracked, false, err.getID(), err.getStackTrace(1), err.errType, err.message, err.cause, err.httpCode, err.errCode, err.noLog, err.isSafe}
-}
-func (err baseError) Msg(msg string, args ...interface{}) Error {
-	if len(args) == 0 {
-		return baseError{err.untracked, err.withStackTrace, err.getID(), err.getStackTrace(1), err.errType, msg, err.cause, err.httpCode, err.errCode, err.noLog, false}
-	}
-	return baseError{err.untracked, err.withStackTrace, err.getID(), err.getStackTrace(1), err.errType, fmt.Sprintf(msg, args...), err.cause, err.httpCode, err.errCode, err.noLog, false}
-}
-func (err baseError) Args(args ...interface{}) Error {
-	return baseError{err.untracked, err.withStackTrace, err.getID(), err.getStackTrace(1), err.errType, fmt.Sprintf(err.message, args...), err.cause, err.httpCode, err.errCode, err.noLog, err.isSafe}
-}
-func (err baseError) Cause(cause error) Error {
-	return baseError{err.untracked, err.withStackTrace, err.getID(), err.getStackTrace(1), err.errType, err.message, Wrap(cause), err.httpCode, err.errCode, err.noLog, err.isSafe}
-}
-func (err baseError) StrCause(str string, args ...interface{}) Error {
-	return baseError{err.untracked, err.withStackTrace, err.getID(), err.getStackTrace(1), err.errType, err.message, GenericError.Msg(str, args...), err.httpCode, err.errCode, err.noLog, err.isSafe}
-}
-func (err baseError) Expand(msg string, args ...interface{}) Error {
-	return baseError{err.untracked, err.withStackTrace, err.getID(), err.getStackTrace(1), err.errType, fmt.Sprintf(msg, args...), err, err.httpCode, err.errCode, err.noLog, false}
-}
-func (err baseError) ExpandSafe(msg string, args ...interface{}) Error {
-	return baseError{err.untracked, err.withStackTrace, err.getID(), err.getStackTrace(1), err.errType, fmt.Sprintf(msg, args...), err, err.httpCode, err.errCode, err.noLog, true}
+	errType ErrorType
+	content content
+	flags   flags
+	trace   trace
+	api     apiData
 }
 
 func (err baseError) GetType() ErrorType {
 	return err.errType
 }
+func (err baseError) GetID() string {
+	return err.trace.id
+}
+func (err baseError) GetStackTrace() string {
+	return err.trace.stackTrace
+}
+
+/* ############################################# */
+/* ###           Mutator Functions           ### */
+/* ############################################# */
+
+func (err baseError) Untracked() Error {
+	flags := err.flags
+	flags.untracked = true
+	return baseError{err.errType, err.content, flags, err.trace, err.api}
+}
+func (err baseError) WithoutStackTrace() Error {
+	flags := err.flags
+	flags.withStackTrace = false
+	return baseError{err.errType, err.content, flags, err.trace, err.api}
+}
+func (err baseError) Safe() Error {
+	flags := err.flags
+	flags.isSafe = true
+	return baseError{err.errType, err.content, flags, err.trace, err.api}
+}
+func (err baseError) Msg(msg string, args ...interface{}) Error {
+	content := err.content
+	if len(args) == 0 {
+		content.message = msg
+	} else {
+		// hack: go-vet erroneously detects missing args when calling Sprintf directly
+		// -> using the encapsulation prevents go-vet from processing the format string
+		content.message = fmt.Sprintf(fmt.Sprintf("%s", msg), args...)
+	}
+	flags := err.flags
+	flags.isSafe = false
+	return baseError{err.errType, content, flags, err.trace, err.api}
+}
+func (err baseError) Args(args ...interface{}) Error {
+	content := err.content
+	content.message = fmt.Sprintf(content.message, args...)
+	return baseError{err.errType, content, err.flags, err.trace, err.api}
+}
+func (err baseError) Cause(cause error) Error {
+	content := err.content
+	content.cause = Wrap(cause)
+	return baseError{err.errType, content, err.flags, err.trace, err.api}
+}
+func (err baseError) StrCause(str string, args ...interface{}) Error {
+	content := err.content
+	content.cause = GenericError.Msg(str, args...).Untracked().Make()
+	return baseError{err.errType, content, err.flags, err.trace, err.api}
+}
+func (err baseError) Expand(msg string, args ...interface{}) Error {
+	content := err.content
+	content.message = fmt.Sprintf(msg, args...)
+	content.cause = err
+	flags := err.flags
+	flags.isSafe = false
+	return baseError{err.errType, content, flags, err.trace, err.api}
+}
+func (err baseError) ExpandSafe(msg string, args ...interface{}) Error {
+	content := err.content
+	content.message = fmt.Sprintf(msg, args...)
+	content.cause = err
+	flags := err.flags
+	flags.isSafe = true
+	return baseError{err.errType, content, flags, err.trace, err.api}
+}
+
+func (err baseError) HTTPCode(code int) Error {
+	api := err.api
+	api.httpCode = code
+	return baseError{err.errType, err.content, err.flags, err.trace, api}
+}
+
+func (err baseError) ErrCode(code int) Error {
+	api := err.api
+	api.errCode = code
+	return baseError{err.errType, err.content, err.flags, err.trace, api}
+}
+
+/* ############################################# */
+/* ###              Comparison               ### */
+/* ############################################# */
+
 func (err baseError) Equals(other error) bool {
 	if other == nil {
 		// err is obviously NOT nil, but other is...
@@ -244,6 +182,9 @@ func (err baseError) Equals(other error) bool {
 	}
 
 	return err.errType == getErrorType(other)
+}
+func (err baseError) Is(template Template) bool {
+	return err.errType == template.GetType()
 }
 
 // AreEqual returns true if the type of both errors is the same regardless of the specific error message. Also returns true if both errors are nil.
@@ -256,8 +197,25 @@ func AreEqual(err1, err2 error) bool {
 		return false
 	}
 
-	return getErrorType(err1) == getErrorType(err2)
+	return areEqual(getErrorType(err1), getErrorType(err2))
 }
+
+func areEqual(type1, type2 ErrorType) bool {
+	return type1 == type2
+}
+
+// InstanceOf returns true if the given error is an instance of the given template. A nil error always returns false.
+func InstanceOf(err error, template Template) bool {
+	if err == nil {
+		return false
+	}
+
+	return getErrorType(err) == template.GetType()
+}
+
+/* ############################################# */
+/* ###             Instantiation             ### */
+/* ############################################# */
 
 // Wrap encapsulates any go-error in the extended Error type. Returns nil if baseErr is nil.
 func Wrap(baseErr error) Error {
@@ -291,14 +249,12 @@ func wrap(baseErr error, withType bool, depth int) Error {
 			}
 		}
 
-		err := baseError{false, true, "", "", errType, msg, nil, defaultHTTPCode, defaultErrCode, false, false}
-		return baseError{err.untracked, err.withStackTrace, err.getID(), err.getStackTrace(depth + 1), errType, msg, nil, defaultHTTPCode, defaultErrCode, false, false}
+		content := content{message: msg, cause: nil}
+		flags := flags{untracked: false, withStackTrace: false, noLog: false, isSafe: false}
+		trace := trace{}
+		api := apiData{defaultHTTPCode, defaultErrCode}
+		return baseError{errType, content, flags, trace, api}
 	}
-}
-
-// New creates a new Error with custom error type.
-func New(errType ErrorType) Error {
-	return baseError{false, true, "", "", errType, "", nil, defaultHTTPCode, defaultErrCode, false, false}
 }
 
 func getErrorType(err error) ErrorType {
@@ -310,64 +266,67 @@ func getErrorType(err error) ErrorType {
 	}
 }
 
-// APIError represents a generic error repsonse object with code and message.
-type APIError struct {
-	ResponseCode int    `json:"-"`
-	ErrorCode    int    `json:"code"`
-	Message      string `json:"message"`
-}
+/* ############################################# */
+/* ###             Error Output              ### */
+/* ############################################# */
 
-// ToRequest writes this APIError object to a HTTP request and aborts pipeline execution.
-func (err APIError) ToRequest(r RequestAborter) {
-	r.AbortWithStatusJSON(err.ResponseCode, err)
+func (err baseError) Error() string {
+	return err.String()
 }
-
-// API returns a new APIError object.
-func API(httpCode, errCode int, message string) APIError {
-	return APIError{httpCode, errCode, message}
+func (err baseError) String() string {
+	return err.string(false)
 }
-
-// DefaultAPI returns a new APIError object using the default http and error codes.
-func DefaultAPI(message string) APIError {
-	return APIError{defaultHTTPCode, defaultErrCode, message}
+func (err baseError) SafeString() string {
+	return err.string(true)
 }
+func (err baseError) string(onlySafe bool) string {
+	if !onlySafe || err.flags.isSafe {
+		var prefix string
+		if err.content.message == "" {
+			prefix = string(err.errType)
+		} else {
+			prefix = err.content.message
+		}
 
-func (err baseError) HTTPCode(code int) Error {
-	return baseError{err.untracked, err.withStackTrace, err.getID(), err.getStackTrace(1), err.errType, err.message, err.cause, code, err.errCode, err.noLog, err.isSafe}
-}
+		suffix := ""
+		if err.content.cause != nil {
+			if onlySafe {
+				suffix = err.content.cause.SafeString()
+			} else {
+				suffix = err.content.cause.String()
+			}
+			if len(suffix) > 0 {
+				suffix = ": " + suffix
+			}
+		}
 
-func (err baseError) ErrCode(code int) Error {
-	return baseError{err.untracked, err.withStackTrace, err.getID(), err.getStackTrace(1), err.errType, err.message, err.cause, err.httpCode, code, err.noLog, err.isSafe}
-}
-
-func (err baseError) Safe() Error {
-	return baseError{err.untracked, err.withStackTrace, err.getID(), err.getStackTrace(1), err.errType, err.message, err.cause, err.httpCode, err.errCode, err.noLog, true}
-}
-
-func (err baseError) API() APIError {
-	suffix := ""
-	if !err.untracked && len(err.id) > 0 {
-		suffix = " [ID " + err.id + "]"
+		return prefix + suffix
 	}
+	return ""
+}
 
-	if PrintUnsafeErrors {
-		return APIError{err.httpCode, err.errCode, err.Error() + suffix}
-	}
-	if err.isSafe {
-		return APIError{err.httpCode, err.errCode, err.SafeString() + suffix}
-	}
-	return APIError{err.httpCode, err.errCode, "An error occured" + suffix}
+func (err baseError) ToRequestAndLog(r RequestAborter, except ...TypedError) {
+	err.ToLog(except...)
+	err.ToRequest(r)
 }
 
 func (err baseError) ToRequest(r RequestAborter) {
 	err.API().ToRequest(r)
 }
 
-// ToRequest writes the given error to a HTTP request and returns true if err was not nil.
-func ToRequest(r RequestAborter, err error) bool {
-	if err == nil {
-		return false
+func (err baseError) ToLog(except ...TypedError) {
+	if !err.flags.untracked {
+		for _, exceptErr := range except {
+			if areEqual(err.errType, exceptErr.GetType()) {
+				// do not print error as it is explicitly excluded
+				return
+			}
+		}
+		if len(err.trace.id) > 0 {
+			Logger("[ERR %v] %v", err.trace.id, err.Error())
+		}
+		if err.flags.withStackTrace && len(err.trace.stackTrace) > 0 {
+			Logger("[STACK %v] %v", err.trace.id, err.trace.stackTrace)
+		}
 	}
-	Wrap(err).ToRequest(r)
-	return true
 }
