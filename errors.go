@@ -342,14 +342,14 @@ func (err baseError) toLog(except ...TypedError) {
 	}
 	if len(err.trace.id) > 0 {
 		if err.flags.untracked {
-			Logger("%v", err.trace.id, err.Error())
+			Logger("%v", err.Error())
 		} else {
 			Logger("[ERR %v] %v", err.trace.id, err.Error())
 		}
 	}
 	if err.flags.withStackTrace && len(err.trace.stackTrace) > 0 {
 		if err.flags.untracked {
-			Logger("%v", err.trace.id, err.trace.stackTrace)
+			Logger("[STACK] %v", err.trace.stackTrace)
 		} else {
 			Logger("[STACK %v] %v", err.trace.id, err.trace.stackTrace)
 		}
