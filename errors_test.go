@@ -202,34 +202,76 @@ func TestDefaultLogger(t *testing.T) {
 	err.ToLog()
 }
 
-func TestToLog(t *testing.T) {
+func TestToRequestAndLog(t *testing.T) {
 	err := New("TestError").Msg("a safe error message").WithStackTrace().Make().StrCause("an unsafe cause").HTTPCode(500).ErrCode(42).Safe()
 	r := &requestAborter{}
-	var sb strings.Builder
-	Logger = func(msg string, args ...interface{}) {
-		sb.WriteString(fmt.Sprintf(msg, args))
-	}
+	lb := setLogBuffer()
 	err.ToRequestAndLog(r)
-	str := sb.String()
+	str := lb.String()
 
 	assert.True(t, strings.Contains(str, err.GetID()), "Log should contain error id")
 	assert.True(t, strings.Contains(str, err.Error()), "Log should contain unsafe error message")
-	assert.True(t, strings.Contains(str, "TestToLog"), "Log should contain stack trace")
+	assert.True(t, strings.Contains(str, "TestToRequestAndLog"), "Log should contain stack trace")
+}
+
+func TestToRequestAndLogUntracked(t *testing.T) {
+	err := New("TestError").Msg("a safe error message").Untracked().Make().HTTPCode(421).ErrCode(80).Safe()
+	r := &requestAborter{}
+	lb := setLogBuffer()
+	err.ToRequestAndLog(r)
+	assert.Equal(t, "", lb.String())
+
+	assert.Equal(t, 421, r.lastHTTPCode)
+	expected := API(421, 80, "a safe error message")
+	assert.Equal(t, expected, *r.lastError)
 }
 
 func TestToLogExcept(t *testing.T) {
 	err := New("TestError").Msg("a safe error message").Make().StrCause("an unsafe cause").HTTPCode(500).ErrCode(42).Safe()
 	r := &requestAborter{}
-	var sb strings.Builder
-	Logger = func(msg string, args ...interface{}) {
-		sb.WriteString(fmt.Sprintf(msg, args))
-	}
+	lb := setLogBuffer()
 	err.ToRequestAndLog(r, New("TestError").Make())
-	str := sb.String()
+	str := lb.String()
 
 	assert.False(t, strings.Contains(str, err.GetID()), "Log should not contain error id")
 	assert.False(t, strings.Contains(str, err.Error()), "Log should not contain unsafe error message")
 	assert.False(t, strings.Contains(str, "TestToLog"), "Log should not contain stack trace")
+}
+
+func TestLogUntracked(t *testing.T) {
+	err := New("TestError").Msg("a safe error message").Untracked().Make()
+	lb := setLogBuffer()
+	err.ToLog()
+	assert.Equal(t, "", lb.String())
+}
+
+func TestForceLog(t *testing.T) {
+	err := New("TestError").Msg("a safe error message").Untracked().Make()
+	lb := setLogBuffer()
+	err.ForceLog()
+	assert.True(t, strings.Contains(lb.String(), "a safe error message"))
+}
+
+func TestToRequestAndForceLog(t *testing.T) {
+	err := New("TestError").Msg("a safe error message").Untracked().Make().HTTPCode(421).ErrCode(80).Safe()
+	r := &requestAborter{}
+	lb := setLogBuffer()
+	err.ToRequestAndForceLog(r)
+	assert.True(t, strings.Contains(lb.String(), "a safe error message"))
+
+	assert.Equal(t, 421, r.lastHTTPCode)
+	expected := API(421, 80, "a safe error message")
+	assert.Equal(t, expected, *r.lastError)
+}
+
+func TestForceLogUntrackedStackTrace(t *testing.T) {
+	err := New("TestError").Msg("a safe error message").WithStackTrace().Make().Untracked()
+	lb := setLogBuffer()
+	err.ForceLog()
+	str := lb.String()
+
+	assert.True(t, strings.Contains(lb.String(), "a safe error message"))
+	assert.True(t, strings.Contains(str, "TestForceLogUntrackedStackTrace"), "Log should not contain stack trace")
 }
 
 /* ############################################# */
@@ -248,4 +290,22 @@ func (r *requestAborter) AbortWithStatusJSON(code int, obj interface{}) {
 		panic(fmt.Sprintf("AbortWithStatusJSON expects APIError but got %T", obj))
 	}
 	r.lastError = &err
+}
+
+type logBuffer struct {
+	sb strings.Builder
+}
+
+func (lb *logBuffer) String() string {
+	return lb.sb.String()
+}
+
+func (lb *logBuffer) Write(msg string, args ...interface{}) {
+	lb.sb.WriteString(fmt.Sprintf(msg, args...))
+}
+
+func setLogBuffer() *logBuffer {
+	lb := &logBuffer{strings.Builder{}}
+	Logger = lb.Write
+	return lb
 }
