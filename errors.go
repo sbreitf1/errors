@@ -72,9 +72,13 @@ type Error interface {
 	ToRequest(r RequestAborter)
 	// ToRequestAndLog calls ToRequest(r) and ToLog(...except).
 	ToRequestAndLog(r RequestAborter, except ...TypedError)
+	// ToRequestAndLog calls ToRequest(r) and ForceLog(...except).
+	ToRequestAndForceLog(r RequestAborter, except ...TypedError)
 
 	// ToLog writes the error message with debug data to the log.
 	ToLog(except ...TypedError)
+	// ForceLog writes the error message (and also untracked ones) with debug data to the log.
+	ForceLog(except ...TypedError)
 }
 
 type baseError struct {
@@ -310,22 +314,43 @@ func (err baseError) ToRequestAndLog(r RequestAborter, except ...TypedError) {
 	err.ToRequest(r)
 }
 
+func (err baseError) ToRequestAndForceLog(r RequestAborter, except ...TypedError) {
+	err.ForceLog(except...)
+	err.ToRequest(r)
+}
+
 func (err baseError) ToRequest(r RequestAborter) {
 	err.API().ToRequest(r)
 }
 
 func (err baseError) ToLog(except ...TypedError) {
 	if !err.flags.untracked {
-		for _, exceptErr := range except {
-			if areEqual(err.errType, exceptErr.GetType()) {
-				// do not print error as it is explicitly excluded
-				return
-			}
+		err.toLog(except...)
+	}
+}
+
+func (err baseError) ForceLog(except ...TypedError) {
+	err.toLog(except...)
+}
+
+func (err baseError) toLog(except ...TypedError) {
+	for _, exceptErr := range except {
+		if areEqual(err.errType, exceptErr.GetType()) {
+			// do not print error as it is explicitly excluded
+			return
 		}
-		if len(err.trace.id) > 0 {
+	}
+	if len(err.trace.id) > 0 {
+		if err.flags.untracked {
+			Logger("%v", err.trace.id, err.Error())
+		} else {
 			Logger("[ERR %v] %v", err.trace.id, err.Error())
 		}
-		if err.flags.withStackTrace && len(err.trace.stackTrace) > 0 {
+	}
+	if err.flags.withStackTrace && len(err.trace.stackTrace) > 0 {
+		if err.flags.untracked {
+			Logger("%v", err.trace.id, err.trace.stackTrace)
+		} else {
 			Logger("[STACK %v] %v", err.trace.id, err.trace.stackTrace)
 		}
 	}
