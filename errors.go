@@ -253,11 +253,7 @@ func wrap(baseErr error, withType bool, depth int) Error {
 			}
 		}
 
-		content := content{message: msg, cause: nil}
-		flags := flags{untracked: false, withStackTrace: false, noLog: false, isSafe: false}
-		trace := trace{}
-		api := apiData{defaultHTTPCode, defaultErrCode}
-		return baseError{errType, content, flags, trace, api}
+		return New(errType).Msg(msg).WithStackTrace().make(depth + 1)
 	}
 }
 

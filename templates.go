@@ -93,7 +93,11 @@ func (t Template) ErrCode(code int) Template {
 
 // Make instatiates an error using this template. A call to this method generates a new ID and StackTrace from the calling location.
 func (t Template) Make() Error {
-	trace := trace{generateID(t.errType, t.content.message), getStackTrace(1)}
+	return t.make(1)
+}
+
+func (t Template) make(depth int) Error {
+	trace := trace{generateID(t.errType, t.content.message), getStackTrace(depth + 1)}
 	return baseError{t.errType, t.content, t.flags, trace, t.api}
 }
 
