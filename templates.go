@@ -10,9 +10,9 @@ import (
 
 var (
 	// GenericError represents a generic error with stack trace.
-	GenericError = New("GenericError").Msg("A generic error occured").WithStackTrace()
+	GenericError = New("An error occured").Trace()
 	// ConfigurationError an error that is caused by an invalid configuration.
-	ConfigurationError = New("ConfigurationError").Msg("The specified configuration is not valid")
+	ConfigurationError = New("The specified configuration is not valid")
 )
 
 // Template represents an error template that can be instatiated to an error using Make().
@@ -23,12 +23,17 @@ type Template struct {
 	api     apiData
 }
 
-// New returns an empty error template with the given error type.
-func New(errType ErrorType) Template {
-	content := content{message: "", cause: nil}
-	flags := flags{untracked: false, withStackTrace: defaultWithStackTrace, noLog: false, isSafe: false}
+// New returns an error template and uses the message format string as error type.
+func New(msg string, args ...interface{}) Template {
+	content := content{message: msg, cause: nil}
+	if len(args) > 0 {
+		// hack: go-vet erroneously detects missing args when calling Sprintf directly
+		// -> using the encapsulation prevents go-vet from processing the format string
+		content.message = fmt.Sprintf(fmt.Sprintf("%s", msg), args...)
+	}
+	flags := flags{track: false, trace: false, isSafe: false}
 	api := apiData{defaultHTTPCode, defaultErrCode}
-	return Template{errType, content, flags, api}
+	return Template{ErrorType(msg), content, flags, api}
 }
 
 // GetType returns the underlying error type of this template.
@@ -36,24 +41,33 @@ func (t Template) GetType() ErrorType {
 	return t.errType
 }
 
-// Untracked disables id and stack trace printing for this error.
-func (t Template) Untracked() Template {
+// Track enables id printing for this error.
+func (t Template) Track() Template {
 	flags := t.flags
-	flags.untracked = true
+	flags.track = true
 	return Template{t.errType, t.content, flags, t.api}
 }
 
-// WithStackTrace enables stack trace printing.
-func (t Template) WithStackTrace() Template {
+// Untrack disabled id and stack trace printing for this error.
+func (t Template) Untrack() Template {
 	flags := t.flags
-	flags.withStackTrace = true
+	flags.track = false
+	flags.trace = false
 	return Template{t.errType, t.content, flags, t.api}
 }
 
-// WithoutStackTrace disables stack trace printing.
-func (t Template) WithoutStackTrace() Template {
+// Trace enables stack trace printing.
+func (t Template) Trace() Template {
 	flags := t.flags
-	flags.withStackTrace = false
+	flags.track = true
+	flags.trace = true
+	return Template{t.errType, t.content, flags, t.api}
+}
+
+// NoTrace disables stack trace printing.
+func (t Template) NoTrace() Template {
+	flags := t.flags
+	flags.trace = false
 	return Template{t.errType, t.content, flags, t.api}
 }
 

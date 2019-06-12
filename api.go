@@ -24,7 +24,7 @@ func DefaultAPI(message string) APIError {
 
 func (err baseError) API() APIError {
 	suffix := ""
-	if !err.flags.untracked && len(err.trace.id) > 0 {
+	if err.flags.track && len(err.trace.id) > 0 {
 		suffix = " [ID " + err.trace.id + "]"
 	}
 

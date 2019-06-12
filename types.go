@@ -20,10 +20,9 @@ type content struct {
 }
 
 type flags struct {
-	untracked      bool
-	withStackTrace bool
-	noLog          bool
-	isSafe         bool
+	track  bool
+	trace  bool
+	isSafe bool
 }
 
 type trace struct {

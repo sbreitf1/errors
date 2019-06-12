@@ -5,9 +5,8 @@ import (
 )
 
 const (
-	defaultHTTPCode       = 500
-	defaultErrCode        = 0
-	defaultWithStackTrace = false
+	defaultHTTPCode = 500
+	defaultErrCode  = 0
 )
 
 var (
@@ -38,10 +37,10 @@ type Error interface {
 	GetID() string
 	GetStackTrace() string
 
-	// Untracked disables id and stack trace printing for this error.
-	Untracked() Error
-	// WithoutStackTrace disables stack trace printing.
-	WithoutStackTrace() Error
+	// Untrack disables id and stack trace printing for this error.
+	Untrack() Error
+	// NoTrace disables stack trace printing.
+	NoTrace() Error
 	// Msg returns a new Error object and replaces the error message. You can supply all formatting args later using Args() to skip formatting in this call.
 	Msg(msg string, args ...interface{}) Error
 	// Args returns a new Error object with filled placeholders. A safe message remains safe.
@@ -103,14 +102,14 @@ func (err baseError) GetStackTrace() string {
 /* ###           Mutator Functions           ### */
 /* ############################################# */
 
-func (err baseError) Untracked() Error {
+func (err baseError) Untrack() Error {
 	flags := err.flags
-	flags.untracked = true
+	flags.track = false
 	return baseError{err.errType, err.content, flags, err.trace, err.api}
 }
-func (err baseError) WithoutStackTrace() Error {
+func (err baseError) NoTrace() Error {
 	flags := err.flags
-	flags.withStackTrace = false
+	flags.trace = false
 	return baseError{err.errType, err.content, flags, err.trace, err.api}
 }
 func (err baseError) Safe() Error {
@@ -143,7 +142,7 @@ func (err baseError) Cause(cause error) Error {
 }
 func (err baseError) StrCause(str string, args ...interface{}) Error {
 	content := err.content
-	content.cause = GenericError.Msg(str, args...).Untracked().Make()
+	content.cause = GenericError.Msg(str, args...).Untrack().Make()
 	return baseError{err.errType, content, err.flags, err.trace, err.api}
 }
 func (err baseError) Expand(msg string, args ...interface{}) Error {
@@ -253,7 +252,7 @@ func wrap(baseErr error, withType bool, depth int) Error {
 			}
 		}
 
-		return New(errType).Msg(msg).WithStackTrace().make(depth + 1)
+		return New(string(errType)).Msg(msg).Trace().make(depth + 1)
 	}
 }
 
@@ -320,7 +319,7 @@ func (err baseError) ToRequest(r RequestAborter) {
 }
 
 func (err baseError) ToLog(except ...TypedError) {
-	if !err.flags.untracked {
+	if err.flags.track {
 		err.toLog(except...)
 	}
 }
@@ -337,14 +336,14 @@ func (err baseError) toLog(except ...TypedError) {
 		}
 	}
 	if len(err.trace.id) > 0 {
-		if err.flags.untracked {
-			Logger("%v", err.Error())
+		if !err.flags.track {
+			Logger("[ERR] %v", err.Error())
 		} else {
 			Logger("[ERR %v] %v", err.trace.id, err.Error())
 		}
 	}
-	if err.flags.withStackTrace && len(err.trace.stackTrace) > 0 {
-		if err.flags.untracked {
+	if err.flags.trace && len(err.trace.stackTrace) > 0 {
+		if !err.flags.track {
 			Logger("[STACK] %v", err.trace.stackTrace)
 		} else {
 			Logger("[STACK %v] %v", err.trace.id, err.trace.stackTrace)
