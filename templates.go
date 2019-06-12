@@ -91,6 +91,13 @@ func (t Template) Msg(msg string, args ...interface{}) Template {
 	return Template{t.errType, content, t.flags, t.api}
 }
 
+// Args fills the message placeholders with the given arguments.
+func (t Template) Args(args ...interface{}) Template {
+	content := t.content
+	content.message = fmt.Sprintf(content.message, args...)
+	return Template{t.errType, content, t.flags, t.api}
+}
+
 // HTTPCode sets the http response code.
 func (t Template) HTTPCode(code int) Template {
 	api := t.api

@@ -23,6 +23,11 @@ func TestMessageArgs(t *testing.T) {
 	assert.Equal(t, "Test foobar message", err.Error())
 }
 
+func TestTemplateArgs(t *testing.T) {
+	err := New("foo %v bar").Args("42").Make()
+	assert.Equal(t, "foo 42 bar", err.Error())
+}
+
 func TestErrorMessageArgs(t *testing.T) {
 	err := New("test").Make().Msg("Test %v message", "foobar")
 	assert.Equal(t, "Test foobar message", err.Error())
