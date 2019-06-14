@@ -11,8 +11,10 @@ import (
 var (
 	// GenericError represents a generic error with stack trace.
 	GenericError = New("An error occured").Trace()
-	// ConfigurationError an error that is caused by an invalid configuration.
+	// ConfigurationError is an error that is caused by an invalid configuration.
 	ConfigurationError = New("The specified configuration is not valid")
+	// ArgumentError denotes a missing or invalid argument.
+	ArgumentError = New("An invalid argument has been supplied")
 )
 
 // Template represents an error template that can be instatiated to an error using Make().
@@ -31,7 +33,7 @@ func New(msg string, args ...interface{}) Template {
 		// -> using the encapsulation prevents go-vet from processing the format string
 		content.message = fmt.Sprintf(fmt.Sprintf("%s", msg), args...)
 	}
-	flags := flags{track: false, trace: false, isSafe: false}
+	flags := flags{track: true, trace: false, isSafe: false}
 	api := apiData{defaultHTTPCode, defaultErrCode}
 	return Template{ErrorType(msg), content, flags, api}
 }
@@ -96,6 +98,18 @@ func (t Template) Args(args ...interface{}) Template {
 	content := t.content
 	content.message = fmt.Sprintf(content.message, args...)
 	return Template{t.errType, content, t.flags, t.api}
+}
+
+// API untracks the error, marks it as safe and update the error and response codes.
+func (t Template) API(httpCode, errCode int) Template {
+	flags := t.flags
+	flags.track = false
+	flags.trace = false
+	flags.isSafe = true
+	api := t.api
+	api.httpCode = httpCode
+	api.errCode = errCode
+	return Template{t.errType, t.content, flags, api}
 }
 
 // HTTPCode sets the http response code.

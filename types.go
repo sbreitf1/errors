@@ -3,6 +3,10 @@ package errors
 // ErrorType represents the base type of an error regardless of the specific error message.
 type ErrorType string
 
+func (e ErrorType) String() string {
+	return string(e)
+}
+
 // RequestAborter defines the required functionality to abort an HTTP request and is compatible with *gin.Context.
 type RequestAborter interface {
 	AbortWithStatusJSON(int, interface{})

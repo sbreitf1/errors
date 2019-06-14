@@ -1,5 +1,14 @@
 package errors
 
+var (
+	// GenericSafeErrorMessage denotes the message replacement when exposing unsafe errors via API.
+	GenericSafeErrorMessage string
+)
+
+func init() {
+	GenericSafeErrorMessage = "An error occured"
+}
+
 // APIError represents a generic error repsonse object with code and message.
 type APIError struct {
 	ResponseCode int    `json:"-"`
@@ -34,7 +43,7 @@ func (err baseError) API() APIError {
 	if err.flags.isSafe {
 		return APIError{err.api.httpCode, err.api.errCode, err.SafeString() + suffix}
 	}
-	return APIError{err.api.httpCode, err.api.errCode, "An error occured" + suffix}
+	return APIError{err.api.httpCode, err.api.errCode, GenericSafeErrorMessage + suffix}
 }
 
 // ToRequest writes the given error to a HTTP request and returns true if err was not nil.
@@ -42,6 +51,6 @@ func ToRequest(r RequestAborter, err error) bool {
 	if err == nil {
 		return false
 	}
-	Wrap(err).ToRequest(r)
+	wrap(err, false, 1).ToRequest(r)
 	return true
 }
