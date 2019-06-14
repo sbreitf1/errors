@@ -23,6 +23,11 @@ func TestMessageArgs(t *testing.T) {
 	assert.Equal(t, "Test foobar message", err.Error())
 }
 
+func TestNewMessageArgs(t *testing.T) {
+	err := New("Test %v message", "foobar").Make()
+	assert.Equal(t, "Test foobar message", err.Error())
+}
+
 func TestTemplateArgs(t *testing.T) {
 	err := New("foo %v bar").Args("42").Make()
 	assert.Equal(t, "foo 42 bar", err.Error())
@@ -145,7 +150,7 @@ func TestDefaultAPI(t *testing.T) {
 }
 
 func TestToAPI(t *testing.T) {
-	err := New("test api").HTTPCode(400).ErrCode(42).Safe().Make()
+	err := New("test api").API(400, 42).Make()
 	expectedErr := APIError{400, 42, "test api"}
 	assert.Equal(t, expectedErr, err.API())
 }
@@ -179,7 +184,7 @@ func TestStackTrace(t *testing.T) {
 }
 
 func TestErrorToRequest(t *testing.T) {
-	err := New("TestError").Msg("This is a safe error message").HTTPCode(400).ErrCode(123).Safe().Make()
+	err := New("TestError").Msg("This is a safe error message").HTTPCode(400).ErrCode(123).Safe().Untrack().Make()
 	r := &requestAborter{}
 	err.ToRequest(r)
 	expected := API(400, 123, "This is a safe error message")
@@ -188,7 +193,7 @@ func TestErrorToRequest(t *testing.T) {
 }
 
 func TestToRequest(t *testing.T) {
-	err := New("TestError").Msg("This is a safe error message").HTTPCode(400).ErrCode(123).Safe().Make()
+	err := New("TestError").Msg("This is a safe error message").API(400, 123).Make()
 	r := &requestAborter{}
 	ToRequest(r, err)
 	expected := API(400, 123, "This is a safe error message")
@@ -220,7 +225,7 @@ func TestToRequestAndLog(t *testing.T) {
 }
 
 func TestToRequestAndLogUntracked(t *testing.T) {
-	err := New("TestError").Msg("a safe error message").Make().HTTPCode(421).ErrCode(80).Safe()
+	err := New("TestError").Msg("a safe error message").Make().HTTPCode(421).ErrCode(80).Safe().Untrack()
 	r := &requestAborter{}
 	lb := setLogBuffer()
 	err.ToRequestAndLog(r)
@@ -245,7 +250,7 @@ func TestToLogExcept(t *testing.T) {
 }
 
 func TestLogUntracked(t *testing.T) {
-	err := New("TestError").Msg("a safe error message").Make()
+	err := New("TestError").Msg("a safe error message").Untrack().Make()
 	lb := setLogBuffer()
 	err.ToLog()
 	assert.Equal(t, "", lb.String())
@@ -259,7 +264,7 @@ func TestForceLog(t *testing.T) {
 }
 
 func TestToRequestAndForceLog(t *testing.T) {
-	err := New("TestError").Msg("a safe error message").Make().HTTPCode(421).ErrCode(80).Safe()
+	err := New("TestError").Msg("a safe error message").API(421, 80).Make()
 	r := &requestAborter{}
 	lb := setLogBuffer()
 	err.ToRequestAndForceLog(r)
