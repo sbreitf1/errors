@@ -20,7 +20,7 @@ import "github.com/sbreitf1/errors"
 
 var (
     // template definition:
-    ArgumentError = errors.New("ArgError").Msg("Argument %s is not valid")
+    ArgumentError = errors.New("Argument %s is not valid")
 )
 
 func FooBar(positiveValue int) errors.Error {
@@ -34,10 +34,10 @@ func FooBar(positiveValue int) errors.Error {
 
 As can be seen in this example, templates can define format strings as consumed by `fmt.Sprintf()` that are evaluated by a later call to `Args()` supplying the content. You can also overwrite the whole message using `Msg()` on the generated error, but this will force the error message to be marked as unsafe.
 
-A key element of this error type is the ability to define the *safeness* of error messages that specify which information can be displayed to API users without revealing critical secrets and implementation details. Call the `Safe()` mutator function after changed the error message via `Msg()` to allow printing the message in public contexts:
+A key element of this error type is the ability to define the *safeness* of error messages that specify which information can be displayed to API users without revealing critical secrets and implementation details. Call the `Safe()` mutator function after changing the error message via `Msg()` to allow printing the message in public contexts:
 
 ```
-SafeArgumentError = errors.New("ArgError").Msg("Argument %s is not valid").Safe()
+SafeArgumentError = errors.New("Argument %s is not valid").Safe()
 ```
 
 Errors derived from this template will be safe and can be printed to public contexts. A call to `Args()` will maintain the safeness state as it only fills expected fields. Changing the message using `Msg()`, however, will remove the safeness-flag as stated above. A call to `SafeString()` will return the safe error message. If the error is not safe, a generic error message will be returned, including a unique id referring to this error instance. Printing the full error message `Error()` including stack trace and id to a log file allows for an indepth view without revealing details to the API client.
@@ -48,7 +48,7 @@ Errors derived from this template will be safe and can be printed to public cont
 Another advantage of this error package is the advanced and unified typing system. When creating a new error template using the global function `New(ErrorType)` you must specify a string denoting the error type of the new error. This error type string is used for comparison regardless of the actual message content. This allows for detailed error messages that can be compared using the same mechanisms as generic errors:
 
 ```
-FileNotFoundError = errors.New("FileNotFoundError").Msg("File %s not found")
+FileNotFoundError = errors.New("File %s not found")
 
 err1 := FileNotFoundError.Make().Args("foo.txt")
 err1.Is(FileNotFoundError) // => true, is instance of template FileNotFoundError
@@ -91,20 +91,22 @@ Mutator functions like `Msg()`, `Args()` and `Safe()` are used to change a speci
 
 | Function | Effect |
 | --- | --- |
-| `Untracked()` | Disable automatic print to log. No id and stack trace will be generated for untracked errors |
-| `WithStackTrace()` | Allow stack traces for this error. Has no effect on untracked errors |
-| `WithoutStackTrace()` | Disallow stack traces for this error (default) |
+| `Track()` | Generate id for this error and print message to log (default) |
+| `Untrack()` | Disable automatic print to log. No id and stack trace will be generated for untracked errors |
+| `Trace()` | Allow stack traces for this error. This also marks the error template as tracked |
+| `NoTrace()` | Disallow stack traces for this error (default) |
 | `Safe()` | Set the safeness flag for this error |
 | `Msg(string, args...)` | Set the message for this error. If no args are supplied, the format string will be evaluated after a call to `Args(args...)` |
 | `HTTPCode(int)` | Sets the HTTP response code for this error |
 | `ErrCode(int)` | Sets the API error code for this error |
+| `API(int, int)` | A shortcut for `.HTTPCode(int).ErrCode(int).Safe().Untrack()` often used for functional API errors |
 
 Most of these methods are also available on **errors**. See the following list for a complete overview:
 
 | Function | Effect |
 | --- | --- |
-| `Untracked()` | Disable automatic print to log. No id and stack trace will be generated for untracked errors |
-| `WithoutStackTrace()` | Disallow stack traces for this error |
+| `Untrack()` | Remove id and stack trace from this error and disable automatic log printing |
+| `NoTrace()` | Remove stack trace from this error |
 | `Safe()` | Set the safeness flag for this error |
 | `Msg(string, args...)` | Set the message for this error. If no args are supplied, the format string will be evaluated after a call to `Args(args...)` |
 | `Args(args...)` | Pass the format arguments for a previous call to `Msg(string)` |
@@ -118,7 +120,12 @@ Most of these methods are also available on **errors**. See the following list f
 
 ### Interopability
 
-TODO: how to interact with error interface?
+Log output of the errors package can be processed by any method that accepts parameters like `fmt.Sprintf`. If you are using [Logrus](https://github.com/sirupsen/logrus) you can simply use the `Errorf` function as logger:
+
+```
+errors.Logger = logrus.Errorf
+```
+By default all errors are printed directly to StdOut.
 
 
 ## Best Practices
@@ -129,8 +136,8 @@ Always use globally defined error templates for error instantiation. You may als
 
 ```
 var (
-    DatabaseError = errors.New("DbError").Msg("Database unreachable")
-    ElementNotFoundError = errors.New("NotFoundError").Msg("Did not find resource %s").HTTPCode(404).Safe().Untracked()
+    DatabaseError = errors.New("Database unreachable")
+    ElementNotFoundError = errors.New("Did not find resource %s").API(404, 0)
 )
 
 func example() {
@@ -145,13 +152,13 @@ Use `Cause(error)` to encapsulate a typical error object in the error model of t
 
 ```
 var (
-    ReadFileError = errors.New("ReadFileError").Msg("Unable to read file %q")
+    ReadFileError = errors.New("Unable to read file %q")
 )
 
 function readData(file string) (string, errors.Error) {
     data, err := ioutil.ReadFile(file)
     if err != nil {
-        return ReadFileError.Make().Args(file).Cause(err);
+        return "", ReadFileError.Make().Args(file).Cause(err);
     }
     return string(data), nil
 }
@@ -163,9 +170,9 @@ Then use `Expand(string, args...)` to propagate errors while maintaining the ori
 function readResourceFile(relativePath string) (string, errors.Error) {
     data, err := readData(filepath.Join("data/resources", relativePath))
     if err != nil {
-        err.Expand("Could not read resource file")
+        return "", err.Expand("Could not read resource file")
     }
-    return data
+    return data, nil
 }
 ```
 
@@ -173,10 +180,10 @@ Alternatively, you can use `Cause(error)` to propagate errors to semantically di
 
 ```
 var (
-    ReadKeyError = errors.New("ReadKeyError").Msg("Unable to parse key")
+    ReadKeyError = errors.New("Unable to parse key")
 )
 
-function parseKey(file string) (*Key, error) {
+function parseKey(file string) (*Key, errors.Error) {
     data, err := ioutil.ReadFile(file)
     if err != nil {
         return nil, ReadKeyError.Make().Cause(err)
@@ -184,6 +191,16 @@ function parseKey(file string) (*Key, error) {
     [...]
 }
 ```
+
+For a fast way of propagating classical errors, you can use `errors.Wrap` that generates a new traced error using the input error type name:
+
+```
+function deleteFile(file string) (errors.Error) {
+    return errors.Wrap(os.Remove(file))
+}
+```
+As you can see, no special handling for `<nil>` is required here, as `errors.Wrap` will also return `<nil>` in this case.
+
 
 ## TL;DR
 
