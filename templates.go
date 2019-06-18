@@ -133,7 +133,7 @@ func (t Template) Make() Error {
 
 // MakeTraced instatiates an error using this template. A call to this method tracks and traces the error and generates a new ID and StackTrace from the calling location. Use the depth parameter to skip a certain number of stack frames in the trace.
 func (t Template) MakeTraced(depth int) Error {
-	return t.make(depth + 1)
+	return t.Trace().make(depth + 1)
 }
 
 func (t Template) make(depth int) Error {

@@ -191,7 +191,7 @@ func TestMakeTraced(t *testing.T) {
 }
 
 func innerMakeTraced() Error {
-	return GenericError.NoTrace().Trace().MakeTraced(1)
+	return GenericError.Untrack().MakeTraced(1)
 }
 
 func TestErrorToRequest(t *testing.T) {
