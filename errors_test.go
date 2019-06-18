@@ -177,10 +177,21 @@ func TestStackTrace(t *testing.T) {
 	err := GenericError.NoTrace().Trace().Make()
 	err = err.Msg("new %v message")
 	trace := err.GetStackTrace()
-	assert.True(t, strings.Contains(err.GetStackTrace(), "TestStackTrace"), "Stack trace should contain 'TestStackTrace'")
-	assert.False(t, strings.Contains(err.GetStackTrace(), "Msg"), "Stack trace should not contain 'Msg'")
+	assert.True(t, strings.Contains(trace, "TestStackTrace"), "Stack trace should contain 'TestStackTrace'")
+	assert.False(t, strings.Contains(trace, "Msg"), "Stack trace should not contain 'Msg'")
 	err = err.Args("test")
 	assert.Equal(t, trace, err.GetStackTrace(), "Stack trace should not change once it is prepared")
+}
+
+func TestMakeTraced(t *testing.T) {
+	err := innerMakeTraced()
+	trace := err.GetStackTrace()
+	assert.Contains(t, trace, "TestMakeTraced", "Stack trace should contain 'TestMakeTraced'")
+	assert.NotContains(t, trace, "innerMakeTraced", "Stack trace should contain 'innerMakeTraced'")
+}
+
+func innerMakeTraced() Error {
+	return GenericError.NoTrace().Trace().MakeTraced(1)
 }
 
 func TestErrorToRequest(t *testing.T) {
