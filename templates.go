@@ -33,7 +33,7 @@ func New(msg string, args ...interface{}) Template {
 		// -> using the encapsulation prevents go-vet from processing the format string
 		content.message = fmt.Sprintf(fmt.Sprintf("%s", msg), args...)
 	}
-	flags := flags{track: true, trace: false, isSafe: false, tags: make(map[string]interface{}), strTags: make(map[string]string), intTags: make(map[string]int)}
+	flags := flags{track: true, trace: false, isSafe: false, tags: make(map[string]interface{})}
 	api := apiData{defaultHTTPCode, defaultErrCode}
 	return Template{ErrorType(msg), content, flags, api}
 }
@@ -110,14 +110,14 @@ func (t Template) Tag(tag string) Template {
 // TagStr adds a named tag with string value to the template.
 func (t Template) TagStr(tag, value string) Template {
 	flags := t.flags
-	flags.strTags[tag] = value
+	flags.tags[tag] = value
 	return Template{t.errType, t.content, flags, t.api}
 }
 
 // TagInt adds a named tag with integer value to the template.
 func (t Template) TagInt(tag string, value int) Template {
 	flags := t.flags
-	flags.intTags[tag] = value
+	flags.tags[tag] = value
 	return Template{t.errType, t.content, flags, t.api}
 }
 

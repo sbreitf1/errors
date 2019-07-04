@@ -110,14 +110,20 @@ func TestTagError(t *testing.T) {
 
 func assertTags(t *testing.T, err Error) {
 	assert.True(t, err.IsTagged("foo"))
-	assert.False(t, err.IsTagged("bar"))
+	assert.True(t, err.IsTagged("bar"))
+	assert.True(t, err.IsTagged("num"))
+	assert.False(t, err.IsTagged("foobar"))
 	{
 		val, ok := err.GetTagStr("bar")
 		assert.True(t, ok)
 		assert.Equal(t, "content", val)
 	}
 	{
-		_, ok := err.GetTagStr("foo")
+		_, ok := err.GetTagStr("num")
+		assert.False(t, ok)
+	}
+	{
+		_, ok := err.GetTagStr("foobar")
 		assert.False(t, ok)
 	}
 	{
@@ -126,7 +132,11 @@ func assertTags(t *testing.T, err Error) {
 		assert.Equal(t, 1337, val)
 	}
 	{
-		_, ok := err.GetTagInt("foo")
+		_, ok := err.GetTagInt("bar")
+		assert.False(t, ok)
+	}
+	{
+		_, ok := err.GetTagInt("foobar")
 		assert.False(t, ok)
 	}
 }

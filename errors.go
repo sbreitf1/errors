@@ -116,12 +116,18 @@ func (err baseError) IsTagged(tag string) bool {
 	return ok
 }
 func (err baseError) GetTagStr(tag string) (string, bool) {
-	val, ok := err.flags.strTags[tag]
-	return val, ok
+	if val, ok := err.flags.tags[tag]; ok {
+		strVal, ok := val.(string)
+		return strVal, ok
+	}
+	return "", false
 }
 func (err baseError) GetTagInt(tag string) (int, bool) {
-	val, ok := err.flags.intTags[tag]
-	return val, ok
+	if val, ok := err.flags.tags[tag]; ok {
+		intVal, ok := val.(int)
+		return intVal, ok
+	}
+	return 0, false
 }
 
 /* ############################################# */
@@ -196,13 +202,13 @@ func (err baseError) Tag(tag string) Error {
 
 func (err baseError) TagStr(tag, value string) Error {
 	flags := err.flags
-	flags.strTags[tag] = value
+	flags.tags[tag] = value
 	return baseError{err.errType, err.content, flags, err.trace, err.api}
 }
 
 func (err baseError) TagInt(tag string, value int) Error {
 	flags := err.flags
-	flags.intTags[tag] = value
+	flags.tags[tag] = value
 	return baseError{err.errType, err.content, flags, err.trace, err.api}
 }
 
