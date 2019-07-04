@@ -15,7 +15,7 @@ import "github.com/sbreitf1/errors"
 
 The main error type of this package is `Error` which is also compatible with the commonly used `error` interface. Every instance of `Error` is typically generated from a globally defined template using `Make()`:
 
-```
+```golang
 import "github.com/sbreitf1/errors"
 
 var (
@@ -36,8 +36,8 @@ As can be seen in this example, templates can define format strings as consumed 
 
 A key element of this error type is the ability to define the *safeness* of error messages that specify which information can be displayed to API users without revealing critical secrets and implementation details. Call the `Safe()` mutator function after changing the error message via `Msg()` to allow printing the message in public contexts:
 
-```
-SafeArgumentError = errors.New("Argument %s is not valid").Safe()
+```golang
+SafeArgumentError := errors.New("Argument %s is not valid").Safe()
 ```
 
 Errors derived from this template will be safe and can be printed to public contexts. A call to `Args()` will maintain the safeness state as it only fills expected fields. Changing the message using `Msg()`, however, will remove the safeness-flag as stated above. A call to `SafeString()` will return the safe error message. If the error is not safe, a generic error message will be returned, including a unique id referring to this error instance. Printing the full error message `Error()` including stack trace and id to a log file allows for an indepth view without revealing details to the API client.
@@ -47,8 +47,8 @@ Errors derived from this template will be safe and can be printed to public cont
 
 Another advantage of this error package is the advanced and unified typing system. When creating a new error template using the global function `New(ErrorType)` you must specify a string denoting the error type of the new error. This error type string is used for comparison regardless of the actual message content. This allows for detailed error messages that can be compared using the same mechanisms as generic errors:
 
-```
-FileNotFoundError = errors.New("File %s not found")
+```golang
+FileNotFoundError := errors.New("File %s not found")
 
 err1 := FileNotFoundError.Make().Args("foo.txt")
 err1.Is(FileNotFoundError) // => true, is instance of template FileNotFoundError
@@ -59,7 +59,7 @@ err2.Equals(err1) // => true, different error messages but same type "FileNotFou
 
 Alternatively you can use the global functions `AreEqual(error,error)` and `InstanceOf(error,Template)` for checking in cases where the values might be `nil`:
 
-```
+```golang
 InstanceOf(err1, FileNotFoundError) // => true
 AreEqual(err1, err2) // => true
 ```
@@ -69,7 +69,7 @@ AreEqual(err1, err2) // => true
 
 This package offers detailed logging and is compatible with the [Gin](https://github.com/gin-gonic/gin) framework for HTTP request handling. To use both functions in conjunction, you only need one call on a returned error object:
 
-```
+```golang
 func handleRequest(c *gin.Context) {
     if err := someHandler(); err != nil {
         err.ToRequestAndLog(c)
@@ -122,7 +122,7 @@ Most of these methods are also available on **errors**. See the following list f
 
 Log output of the errors package can be processed by any method that accepts parameters like `fmt.Sprintf`. If you are using [Logrus](https://github.com/sirupsen/logrus) you can simply use the `Errorf` function as logger:
 
-```
+```golang
 errors.Logger = logrus.Errorf
 ```
 By default all errors are printed directly to StdOut.
@@ -134,7 +134,7 @@ By default all errors are printed directly to StdOut.
 
 Always use globally defined error templates for error instantiation. You may also define format messages without passing arguments to delay filling in the actual values when they are available in the application context. Use `Make()` during execution to instantiate a new error and prepare id and stack trace at this location:
 
-```
+```golang
 var (
     DatabaseError = errors.New("Database unreachable")
     ElementNotFoundError = errors.New("Did not find resource %s").API(404, 0)
@@ -150,12 +150,12 @@ func example() {
 
 Use `Cause(error)` to encapsulate a typical error object in the error model of this package:
 
-```
+```golang
 var (
     ReadFileError = errors.New("Unable to read file %q")
 )
 
-function readData(file string) (string, errors.Error) {
+func readData(file string) (string, errors.Error) {
     data, err := ioutil.ReadFile(file)
     if err != nil {
         return "", ReadFileError.Make().Args(file).Cause(err);
@@ -166,8 +166,8 @@ function readData(file string) (string, errors.Error) {
 
 Then use `Expand(string, args...)` to propagate errors while maintaining the original error type:
 
-```
-function readResourceFile(relativePath string) (string, errors.Error) {
+```golang
+func readResourceFile(relativePath string) (string, errors.Error) {
     data, err := readData(filepath.Join("data/resources", relativePath))
     if err != nil {
         return "", err.Expand("Could not read resource file")
@@ -178,12 +178,12 @@ function readResourceFile(relativePath string) (string, errors.Error) {
 
 Alternatively, you can use `Cause(error)` to propagate errors to semantically distinct steps:
 
-```
+```golang
 var (
     ReadKeyError = errors.New("Unable to parse key")
 )
 
-function parseKey(file string) (*Key, errors.Error) {
+func parseKey(file string) (*Key, errors.Error) {
     data, err := ioutil.ReadFile(file)
     if err != nil {
         return nil, ReadKeyError.Make().Cause(err)
@@ -194,8 +194,8 @@ function parseKey(file string) (*Key, errors.Error) {
 
 For a fast way of propagating classical errors, you can use `errors.Wrap` that generates a new traced error using the input error type name:
 
-```
-function deleteFile(file string) (errors.Error) {
+```golang
+func deleteFile(file string) (errors.Error) {
     return errors.Wrap(os.Remove(file))
 }
 ```
