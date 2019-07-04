@@ -54,6 +54,19 @@ type Error interface {
 	// ExpandSafe creates a copy of this error with given message and sets the current error as cause. The expanded message is marked as safe.
 	ExpandSafe(msg string, args ...interface{}) Error
 
+	// Tag adds a named tag to the error.
+	Tag(tag string) Error
+	// IsTagged returns whether the error contains a named tag. Tags with attached value are not captured by this method.
+	IsTagged(tag string) bool
+	// TagStr adds a named tag with string value to the error.
+	TagStr(tag, value string) Error
+	// GetTagStr returns a string tag or false, if no tag is set.
+	GetTagStr(tag string) (string, bool)
+	// TagInt adds a named tag with integer value to the error.
+	TagInt(tag string, value int) Error
+	// GetTagInt returns an integer tag or false, if no tag is set.
+	GetTagInt(tag string) (int, bool)
+
 	// Equals returns true when the error types are equal (ignoring the explicit error message).
 	Equals(other error) bool
 	// Is returns trhe when the error is an instance of the given template.
@@ -96,6 +109,19 @@ func (err baseError) GetID() string {
 }
 func (err baseError) GetStackTrace() string {
 	return err.trace.stackTrace
+}
+
+func (err baseError) IsTagged(tag string) bool {
+	_, ok := err.flags.tags[tag]
+	return ok
+}
+func (err baseError) GetTagStr(tag string) (string, bool) {
+	val, ok := err.flags.strTags[tag]
+	return val, ok
+}
+func (err baseError) GetTagInt(tag string) (int, bool) {
+	val, ok := err.flags.intTags[tag]
+	return val, ok
 }
 
 /* ############################################# */
@@ -160,6 +186,24 @@ func (err baseError) ExpandSafe(msg string, args ...interface{}) Error {
 	flags := err.flags
 	flags.isSafe = true
 	return baseError{err.errType, content, flags, err.trace, err.api}
+}
+
+func (err baseError) Tag(tag string) Error {
+	flags := err.flags
+	flags.tags[tag] = nil
+	return baseError{err.errType, err.content, flags, err.trace, err.api}
+}
+
+func (err baseError) TagStr(tag, value string) Error {
+	flags := err.flags
+	flags.strTags[tag] = value
+	return baseError{err.errType, err.content, flags, err.trace, err.api}
+}
+
+func (err baseError) TagInt(tag string, value int) Error {
+	flags := err.flags
+	flags.intTags[tag] = value
+	return baseError{err.errType, err.content, flags, err.trace, err.api}
 }
 
 func (err baseError) HTTPCode(code int) Error {

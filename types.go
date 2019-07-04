@@ -24,9 +24,12 @@ type content struct {
 }
 
 type flags struct {
-	track  bool
-	trace  bool
-	isSafe bool
+	track   bool
+	trace   bool
+	isSafe  bool
+	tags    map[string]interface{}
+	strTags map[string]string
+	intTags map[string]int
 }
 
 type trace struct {

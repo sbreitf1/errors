@@ -100,6 +100,37 @@ func TestSafe(t *testing.T) {
 	assert.True(t, strings.Contains(err.API().Message, "ane46ndsn4e"))
 }
 
+func TestTagTemplate(t *testing.T) {
+	assertTags(t, New("test").Tag("foo").TagStr("bar", "content").TagInt("num", 1337).Make())
+}
+
+func TestTagError(t *testing.T) {
+	assertTags(t, New("test").Make().Tag("foo").TagStr("bar", "content").TagInt("num", 1337))
+}
+
+func assertTags(t *testing.T, err Error) {
+	assert.True(t, err.IsTagged("foo"))
+	assert.False(t, err.IsTagged("bar"))
+	{
+		val, ok := err.GetTagStr("bar")
+		assert.True(t, ok)
+		assert.Equal(t, "content", val)
+	}
+	{
+		_, ok := err.GetTagStr("foo")
+		assert.False(t, ok)
+	}
+	{
+		val, ok := err.GetTagInt("num")
+		assert.True(t, ok)
+		assert.Equal(t, 1337, val)
+	}
+	{
+		_, ok := err.GetTagInt("foo")
+		assert.False(t, ok)
+	}
+}
+
 func TestEquals(t *testing.T) {
 	err := GenericError.Make().Msg("test %v").Args("foobar").Cause(nil).Cause(fmt.Errorf("inner")).HTTPCode(400).ErrCode(42)
 	assert.True(t, err.Is(GenericError))
